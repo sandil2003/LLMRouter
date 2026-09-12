@@ -16,7 +16,7 @@ type Config struct {
 func Load() *Config {
 	cfg := &Config{
 		Host:         "127.0.0.1",
-		Port:         8080,
+		Port:         8088,
 		DatabasePath: "llmrouter.db",
 		LogLevel:     "INFO",
 	}

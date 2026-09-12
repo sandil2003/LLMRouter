@@ -29,7 +29,7 @@ func (r *ModelRepository) ListByProvider(ctx context.Context, providerID string)
 	}
 	defer rows.Close()
 
-	var list []models.ModelConfig
+	list := make([]models.ModelConfig, 0)
 	for rows.Next() {
 		var m models.ModelConfig
 		if err := rows.Scan(&m.ID, &m.ProviderID, &m.Name, &m.Enabled, &m.CreatedAt); err != nil {
@@ -53,7 +53,7 @@ func (r *ModelRepository) ListAllActive(ctx context.Context) ([]models.ModelConf
 	}
 	defer rows.Close()
 
-	var list []models.ModelConfig
+	list := make([]models.ModelConfig, 0)
 	for rows.Next() {
 		var m models.ModelConfig
 		if err := rows.Scan(&m.ID, &m.ProviderID, &m.Name, &m.Enabled, &m.CreatedAt); err != nil {

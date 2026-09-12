@@ -75,7 +75,7 @@ func (r *LogRepository) GetLogs(ctx context.Context, filter models.LogFilter) ([
 	}
 	defer rows.Close()
 
-	var logs []models.RequestLog
+	logs := make([]models.RequestLog, 0)
 	for rows.Next() {
 		var l models.RequestLog
 		if err := rows.Scan(&l.ID, &l.RequestID, &l.ProviderID, &l.Model, &l.Status, &l.LatencyMs, &l.Error, &l.FallbackUsed, &l.AttemptCount, &l.CreatedAt); err != nil {

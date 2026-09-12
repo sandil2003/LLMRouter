@@ -32,7 +32,7 @@ func (r *ProviderRepository) GetAll(ctx context.Context) ([]models.ProviderConfi
 	}
 	defer rows.Close()
 
-	var list []models.ProviderConfig
+	list := make([]models.ProviderConfig, 0)
 	for rows.Next() {
 		var p models.ProviderConfig
 		if err := rows.Scan(&p.ID, &p.Name, &p.Enabled, &p.Priority, &p.BaseURL, &p.CreatedAt, &p.UpdatedAt); err != nil {
@@ -55,7 +55,7 @@ func (r *ProviderRepository) GetActiveOrderedByPriority(ctx context.Context) ([]
 	}
 	defer rows.Close()
 
-	var list []models.ProviderConfig
+	list := make([]models.ProviderConfig, 0)
 	for rows.Next() {
 		var p models.ProviderConfig
 		if err := rows.Scan(&p.ID, &p.Name, &p.Enabled, &p.Priority, &p.BaseURL, &p.CreatedAt, &p.UpdatedAt); err != nil {
