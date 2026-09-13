@@ -1,6 +1,8 @@
 package openrouter
 
 import (
+	"strings"
+
 	"github.com/llmrouter/backend/internal/providers/openai"
 )
 
@@ -19,4 +21,8 @@ func New(id, apiKey, baseURL string) *Provider {
 	return &Provider{
 		Provider: openai.New(id, name, apiKey, baseURL),
 	}
+}
+
+func (p *Provider) SupportsModel(model string) bool {
+	return strings.Contains(model, "/") || strings.Contains(strings.ToLower(model), "openrouter")
 }

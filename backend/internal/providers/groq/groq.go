@@ -1,6 +1,8 @@
 package groq
 
 import (
+	"strings"
+
 	"github.com/llmrouter/backend/internal/providers/openai"
 )
 
@@ -19,4 +21,9 @@ func New(id, apiKey, baseURL string) *Provider {
 	return &Provider{
 		Provider: openai.New(id, name, apiKey, baseURL),
 	}
+}
+
+func (p *Provider) SupportsModel(model string) bool {
+	m := strings.ToLower(model)
+	return strings.Contains(m, "llama") || strings.Contains(m, "mixtral") || strings.Contains(m, "gemma") || strings.Contains(m, "whisper") || strings.Contains(m, "groq")
 }

@@ -32,6 +32,7 @@ type ProviderWithStatus struct {
 	CircuitState      string              `json:"circuit_state"`
 	ConsecutiveErrors int                 `json:"consecutive_errors"`
 	ActiveModels      []string            `json:"active_models"`
+	HasAPIKey         bool                `json:"has_api_key"`
 }
 
 // ModelConfig represents an LLM model offered by a provider.

@@ -10,8 +10,8 @@ import {
   Sparkles,
   Copy,
   Check,
-  Radio,
 } from 'lucide-react';
+import logoImg from '../../assets/logo.png';
 import { useGatewayHealth } from '../../hooks/useGatewayHealth';
 import { getBaseUrl } from '../../services/api';
 
@@ -40,10 +40,10 @@ export const Sidebar: React.FC = () => {
     <aside className="sidebar">
       <div className="sidebar-header">
         <div className="sidebar-brand-icon">
-          <Radio size={18} />
+          <img src={logoImg} alt="LLMRouter" />
         </div>
         <div>
-          <span className="sidebar-title">LLMRouter</span>
+          <span className="sidebar-title">Routez</span>
           <div style={{ fontSize: '11px', color: 'var(--text-muted)' }}>Local Gateway</div>
         </div>
       </div>

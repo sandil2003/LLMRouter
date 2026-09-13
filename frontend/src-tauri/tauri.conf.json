@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "frontend",
+  "productName": "LLMRouter",
   "version": "0.1.0",
   "identifier": "com.relayllm.desktop",
   "build": {
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "frontend",
-        "width": 800,
-        "height": 600
+        "title": "LLMRouter",
+        "width": 1050,
+        "height": 720
       }
     ],
     "security": {

@@ -33,7 +33,7 @@ export const PlaygroundPage: React.FC = () => {
     const start = performance.now();
 
     const req = {
-      model: model === 'default' ? 'gemini-1.5-flash' : model,
+      model: model === 'default' ? 'gemini-2.5-flash' : model,
       messages: [{ role: 'user' as const, content: prompt }],
     };
 
@@ -90,7 +90,8 @@ export const PlaygroundPage: React.FC = () => {
                       {m.name} ({m.provider_id})
                     </option>
                   ))}
-                  <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                  <option value="gemini-2.5-flash">gemini-2.5-flash</option>
+                  <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
                   <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
                   <option value="gpt-4o">gpt-4o</option>
                 </select>

@@ -2,8 +2,10 @@ package providers
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 )
@@ -14,16 +16,35 @@ type CredentialProvider interface {
 	SetAPIKey(ctx context.Context, providerID string, key string) error
 }
 
-// EnvCredentialProvider loads API keys from environment variables (e.g. GEMINI_API_KEY, GROQ_API_KEY).
+// EnvCredentialProvider loads API keys from environment variables or local .credentials.json.
 type EnvCredentialProvider struct {
 	mu   sync.RWMutex
 	keys map[string]string
 }
 
+func getCredentialPaths() []string {
+	paths := []string{".credentials.json"}
+	if _, err := os.Stat("backend"); err == nil {
+		paths = append(paths, filepath.Join("backend", ".credentials.json"))
+	}
+	if _, err := os.Stat(".."); err == nil {
+		paths = append(paths, filepath.Join("..", ".credentials.json"))
+	}
+	return paths
+}
+
 func NewEnvCredentialProvider() *EnvCredentialProvider {
-	return &EnvCredentialProvider{
+	e := &EnvCredentialProvider{
 		keys: make(map[string]string),
 	}
+	for _, p := range getCredentialPaths() {
+		if data, err := os.ReadFile(p); err == nil && len(data) > 0 {
+			if err := json.Unmarshal(data, &e.keys); err == nil && len(e.keys) > 0 {
+				break
+			}
+		}
+	}
+	return e
 }
 
 func (e *EnvCredentialProvider) GetAPIKey(ctx context.Context, providerID string) (string, error) {
@@ -50,7 +71,16 @@ func (e *EnvCredentialProvider) GetAPIKey(ctx context.Context, providerID string
 func (e *EnvCredentialProvider) SetAPIKey(ctx context.Context, providerID string, key string) error {
 	e.mu.Lock()
 	defer e.mu.Unlock()
-	e.keys[providerID] = key
+	if key == "" {
+		delete(e.keys, providerID)
+	} else {
+		e.keys[providerID] = key
+	}
+	if data, err := json.MarshalIndent(e.keys, "", "  "); err == nil {
+		for _, p := range getCredentialPaths() {
+			_ = os.WriteFile(p, data, 0600)
+		}
+	}
 	return nil
 }
 

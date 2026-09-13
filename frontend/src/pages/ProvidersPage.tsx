@@ -12,7 +12,7 @@ const PRESETS = [
   {
     name: 'Gemini',
     base_url: 'https://generativelanguage.googleapis.com/v1beta',
-    models: 'gemini-1.5-flash, gemini-1.5-pro',
+    models: 'gemini-2.5-flash, gemini-3.1-flash-lite, gemini-2.5-pro',
   },
   {
     name: 'Groq',
@@ -126,7 +126,7 @@ export const ProvidersPage: React.FC = () => {
       api_key: '',
       priority: p.priority,
       enabled: p.enabled,
-      models: p.active_models.join(', '),
+      models: (p.active_models || []).join(', '),
     });
     setIsEditOpen(true);
   };
@@ -146,7 +146,7 @@ export const ProvidersPage: React.FC = () => {
         priority: Number(formData.priority) || 1,
         enabled: formData.enabled,
         base_url: formData.base_url,
-        api_key: formData.api_key ? formData.api_key : undefined,
+        api_key: formData.api_key.trim() ? formData.api_key.trim() : undefined,
         models: modelsArray,
       };
 
@@ -221,7 +221,14 @@ export const ProvidersPage: React.FC = () => {
                 {providers.map((p) => (
                   <tr key={p.id}>
                     <td>
-                      <div style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{p.name}</span>
+                        {p.has_api_key ? (
+                          <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--success-bg)', color: 'var(--success)', border: '1px solid var(--success-border)', fontWeight: 600 }}>Key Configured</span>
+                        ) : (
+                          <span style={{ fontSize: 10, padding: '1px 6px', borderRadius: 'var(--radius-sm)', backgroundColor: 'var(--warning-bg)', color: 'var(--warning)', border: '1px solid var(--warning-border)', fontWeight: 600 }}>No Key</span>
+                        )}
+                      </div>
                       <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>{p.base_url || 'Default URL'}</div>
                     </td>
                     <td>
@@ -447,13 +454,20 @@ export const ProvidersPage: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Update API Key (Leave blank to keep existing)</label>
+            <label className="form-label">
+              API Key{' '}
+              {selectedProvider?.has_api_key && (
+                <span style={{ fontSize: 11, color: 'var(--success)', fontWeight: 600 }}>
+                  (Current key saved. Leave blank to keep existing key)
+                </span>
+              )}
+            </label>
             <input
               className="form-input"
               type="password"
               value={formData.api_key}
               onChange={(e) => setFormData({ ...formData, api_key: e.target.value })}
-              placeholder="Enter new key to replace..."
+              placeholder={selectedProvider?.has_api_key ? '•••••••••••••••• (Leave blank to keep current key)' : 'Enter API key...'}
             />
           </div>
 

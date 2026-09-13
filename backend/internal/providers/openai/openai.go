@@ -49,8 +49,8 @@ func (p *Provider) SetAPIKey(key string) {
 }
 
 func (p *Provider) SupportsModel(model string) bool {
-	// If needed, check model prefix or supported models list
-	return true
+	m := strings.ToLower(model)
+	return strings.HasPrefix(m, "gpt-") || strings.HasPrefix(m, "o1") || strings.HasPrefix(m, "o3") || strings.HasPrefix(m, "o4") || strings.HasPrefix(m, "chatgpt") || strings.Contains(m, "openai")
 }
 
 func (p *Provider) HealthCheck(ctx context.Context) error {
@@ -75,6 +75,10 @@ func (p *Provider) HealthCheck(ctx context.Context) error {
 }
 
 func (p *Provider) Chat(ctx context.Context, req *models.ChatRequest) (*models.ChatResponse, error) {
+	if p.apiKey == "" {
+		return nil, fmt.Errorf("%w: missing API key for '%s' (add key in Providers page or set %s_API_KEY)", providers.ErrUnauthorized, p.name, strings.ToUpper(p.id))
+	}
+
 	reqCopy := *req
 	reqCopy.Stream = false
 
@@ -89,9 +93,7 @@ func (p *Provider) Chat(ctx context.Context, req *models.ChatRequest) (*models.C
 	}
 
 	httpReq.Header.Set("Content-Type", "application/json")
-	if p.apiKey != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
-	}
+	httpReq.Header.Set("Authorization", "Bearer "+p.apiKey)
 
 	resp, err := p.Client.Do(httpReq)
 	if err != nil {
@@ -112,6 +114,10 @@ func (p *Provider) Chat(ctx context.Context, req *models.ChatRequest) (*models.C
 }
 
 func (p *Provider) ChatStream(ctx context.Context, req *models.ChatRequest) (<-chan providers.StreamEvent, error) {
+	if p.apiKey == "" {
+		return nil, fmt.Errorf("%w: missing API key for '%s' (add key in Providers page or set %s_API_KEY)", providers.ErrUnauthorized, p.name, strings.ToUpper(p.id))
+	}
+
 	reqCopy := *req
 	reqCopy.Stream = true
 

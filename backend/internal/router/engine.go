@@ -62,7 +62,29 @@ func NewEngine(
 	}
 }
 
-// GetCandidates finds active, supported, and unblocked provider instances.
+func (e *Engine) providerSupportsModel(ctx context.Context, p providers.Provider, providerID string, model string) bool {
+	if model == "" || model == "default" {
+		return true
+	}
+
+	// 1. Check if model is registered in SQLite for this provider
+	if dbModels, err := e.modelRepo.ListByProvider(ctx, providerID); err == nil {
+		for _, m := range dbModels {
+			if m.Enabled && strings.EqualFold(m.Name, model) {
+				return true
+			}
+		}
+	}
+
+	// 2. Check if the provider adapter supports this model pattern
+	if p.SupportsModel(model) {
+		return true
+	}
+
+	return false
+}
+
+// GetCandidates finds active, supported, credentialed, and unblocked provider instances.
 func (e *Engine) GetCandidates(ctx context.Context, model string) ([]Candidate, error) {
 	configs, err := e.providerRepo.GetActiveOrderedByPriority(ctx)
 	if err != nil {
@@ -76,8 +98,17 @@ func (e *Engine) GetCandidates(ctx context.Context, model string) ([]Candidate, 
 			continue
 		}
 
-		if !p.SupportsModel(model) {
+		if !e.providerSupportsModel(ctx, p, cfg.ID, model) {
 			continue
+		}
+
+		// Ensure provider has an API key configured (skip keyless providers unless mock)
+		if cfg.ID != "mock" {
+			key, _ := e.registry.Credentials().GetAPIKey(ctx, cfg.ID)
+			if strings.TrimSpace(key) == "" {
+				slog.Debug("Provider skipped due to missing API key", "provider", cfg.ID)
+				continue
+			}
 		}
 
 		// Check rate limit tracker
@@ -124,7 +155,7 @@ func (e *Engine) ExecuteChat(ctx context.Context, req *models.ChatRequest, reque
 		return nil, err
 	}
 	if len(candidates) == 0 {
-		return nil, ErrNoProvidersAvailable
+		return nil, fmt.Errorf("%w: no active provider with a valid API key supports model '%s' (add an API key in the Providers page)", ErrNoProvidersAvailable, req.Model)
 	}
 
 	strat := e.SelectStrategy(ctx)
@@ -251,7 +282,7 @@ func (e *Engine) ExecuteStream(ctx context.Context, req *models.ChatRequest, req
 		return nil, err
 	}
 	if len(candidates) == 0 {
-		return nil, ErrNoProvidersAvailable
+		return nil, fmt.Errorf("%w: no active provider with a valid API key supports model '%s' (add an API key in the Providers page)", ErrNoProvidersAvailable, req.Model)
 	}
 
 	strat := e.SelectStrategy(ctx)

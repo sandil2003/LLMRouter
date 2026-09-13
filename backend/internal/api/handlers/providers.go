@@ -97,6 +97,8 @@ func (h *ProvidersHandler) List(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		activeKey, _ := h.registry.Credentials().GetAPIKey(ctx, cfg.ID)
+
 		result = append(result, models.ProviderWithStatus{
 			ProviderConfig:    cfg,
 			HealthState:       healthState,
@@ -105,6 +107,7 @@ func (h *ProvidersHandler) List(w http.ResponseWriter, r *http.Request) {
 			CircuitState:      string(cbState),
 			ConsecutiveErrors: fails,
 			ActiveModels:      activeModelNames,
+			HasAPIKey:         activeKey != "",
 		})
 	}
 
@@ -154,18 +157,13 @@ func (h *ProvidersHandler) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Register API key in secure credStore
-	if req.APIKey != "" {
-		_ = h.registry.UpdateAPIKey(ctx, id, req.APIKey)
+	if strings.TrimSpace(req.APIKey) != "" {
+		_ = h.registry.UpdateAPIKey(ctx, id, strings.TrimSpace(req.APIKey))
 	}
 
 	// Save associated models
-	for _, modelName := range req.Models {
-		_ = h.modelRepo.Upsert(ctx, &models.ModelConfig{
-			ID:         id + ":" + modelName,
-			ProviderID: id,
-			Name:       modelName,
-			Enabled:    true,
-		})
+	if len(req.Models) > 0 {
+		_ = h.modelRepo.ReplaceProviderModels(ctx, id, req.Models)
 	}
 
 	// Instantiate and register in memory
@@ -220,21 +218,14 @@ func (h *ProvidersHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	var apiKey string
 	if req.APIKey != nil {
-		apiKey = *req.APIKey
+		apiKey = strings.TrimSpace(*req.APIKey)
 		_ = h.registry.UpdateAPIKey(ctx, id, apiKey)
 	} else {
 		apiKey, _ = h.registry.Credentials().GetAPIKey(ctx, id)
 	}
 
-	if len(req.Models) > 0 {
-		for _, modelName := range req.Models {
-			_ = h.modelRepo.Upsert(ctx, &models.ModelConfig{
-				ID:         id + ":" + modelName,
-				ProviderID: id,
-				Name:       modelName,
-				Enabled:    true,
-			})
-		}
+	if req.Models != nil {
+		_ = h.modelRepo.ReplaceProviderModels(ctx, id, req.Models)
 	}
 
 	h.registerProviderInstance(ctx, *existing, apiKey)

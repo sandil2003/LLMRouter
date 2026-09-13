@@ -16,7 +16,7 @@ const routeMeta: Record<string, { title: string; subtitle: string }> = {
 export const Header: React.FC<{ onRefresh?: () => void }> = ({ onRefresh }) => {
   const location = useLocation();
   const { online, latencyMs, database, refresh } = useGatewayHealth();
-  const meta = routeMeta[location.pathname] || { title: 'LLMRouter', subtitle: 'Local LLM Gateway' };
+  const meta = routeMeta[location.pathname] || { title: 'Routz', subtitle: 'Local LLM Gateway' };
 
   const handleRefresh = async () => {
     await refresh();

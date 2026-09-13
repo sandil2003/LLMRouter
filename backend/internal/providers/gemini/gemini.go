@@ -50,8 +50,13 @@ func (p *Provider) Name() string {
 	return p.name
 }
 
+func (p *Provider) SetAPIKey(key string) {
+	p.apiKey = key
+}
+
 func (p *Provider) SupportsModel(model string) bool {
-	return strings.Contains(strings.ToLower(model), "gemini")
+	m := strings.ToLower(model)
+	return strings.Contains(m, "gemini") || strings.Contains(m, "flash") || strings.Contains(m, "pro") || m == "default"
 }
 
 func (p *Provider) HealthCheck(ctx context.Context) error {
@@ -150,11 +155,36 @@ func (p *Provider) toGeminiRequest(req *models.ChatRequest) *geminiRequest {
 	return gReq
 }
 
-func (p *Provider) Chat(ctx context.Context, req *models.ChatRequest) (*models.ChatResponse, error) {
-	model := req.Model
-	if !strings.HasPrefix(model, "models/") && !strings.Contains(model, "gemini") {
-		model = "gemini-1.5-flash"
+func normalizeGeminiModel(model string) string {
+	m := strings.TrimSpace(model)
+	if m == "" || m == "default" {
+		return "gemini-2.5-flash"
 	}
+	if strings.HasPrefix(m, "models/") {
+		m = strings.TrimPrefix(m, "models/")
+	}
+
+	clean := strings.ToLower(m)
+	clean = strings.ReplaceAll(clean, " ", "-")
+
+	if !strings.HasPrefix(clean, "gemini-") {
+		clean = "gemini-" + clean
+	}
+
+	switch clean {
+	case "gemini-1.5-flash", "gemini-1.5-pro":
+		return "gemini-2.5-flash"
+	default:
+		return clean
+	}
+}
+
+func (p *Provider) Chat(ctx context.Context, req *models.ChatRequest) (*models.ChatResponse, error) {
+	if p.apiKey == "" {
+		return nil, fmt.Errorf("%w: missing API key for 'Gemini' (add key in Providers page or set GEMINI_API_KEY)", providers.ErrUnauthorized)
+	}
+
+	model := normalizeGeminiModel(req.Model)
 
 	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", p.baseURL, model, p.apiKey)
 	gReq := p.toGeminiRequest(req)
@@ -225,10 +255,11 @@ func (p *Provider) Chat(ctx context.Context, req *models.ChatRequest) (*models.C
 }
 
 func (p *Provider) ChatStream(ctx context.Context, req *models.ChatRequest) (<-chan providers.StreamEvent, error) {
-	model := req.Model
-	if !strings.HasPrefix(model, "models/") && !strings.Contains(model, "gemini") {
-		model = "gemini-1.5-flash"
+	if p.apiKey == "" {
+		return nil, fmt.Errorf("%w: missing API key for 'Gemini' (add key in Providers page or set GEMINI_API_KEY)", providers.ErrUnauthorized)
 	}
+
+	model := normalizeGeminiModel(req.Model)
 
 	url := fmt.Sprintf("%s/models/%s:streamGenerateContent?alt=sse&key=%s", p.baseURL, model, p.apiKey)
 	gReq := p.toGeminiRequest(req)

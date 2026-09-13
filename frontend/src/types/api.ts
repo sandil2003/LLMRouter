@@ -23,6 +23,7 @@ export interface ProviderWithStatus extends ProviderConfig {
   circuit_state: string;
   consecutive_errors: number;
   active_models: string[];
+  has_api_key?: boolean;
 }
 
 export interface CreateProviderPayload {

@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/llmrouter/backend/internal/database"
@@ -84,4 +85,33 @@ func (r *ModelRepository) Upsert(ctx context.Context, m *models.ModelConfig) err
 func (r *ModelRepository) Delete(ctx context.Context, id string) error {
 	_, err := r.db.ExecContext(ctx, `DELETE FROM models WHERE id = ?`, id)
 	return err
+}
+
+func (r *ModelRepository) ReplaceProviderModels(ctx context.Context, providerID string, modelNames []string) error {
+	tx, err := r.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer tx.Rollback()
+
+	if _, err := tx.ExecContext(ctx, `DELETE FROM models WHERE provider_id = ?`, providerID); err != nil {
+		return fmt.Errorf("delete old models: %w", err)
+	}
+
+	now := time.Now().UTC()
+	for _, raw := range modelNames {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		id := providerID + ":" + name
+		if _, err := tx.ExecContext(ctx, `
+			INSERT INTO models (id, provider_id, name, enabled, created_at)
+			VALUES (?, ?, ?, 1, ?)
+		`, id, providerID, name, now); err != nil {
+			return fmt.Errorf("insert model %s: %w", name, err)
+		}
+	}
+
+	return tx.Commit()
 }
