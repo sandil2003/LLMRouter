@@ -1,12 +1,14 @@
 import React, { useEffect, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
-import { Plus, Edit2, Trash2, Radio } from 'lucide-react';
+import { Plus, Edit2, Trash2, Radio, Sparkles, X } from 'lucide-react';
 import { api } from '../services/api';
 import { ProviderWithStatus, CreateProviderPayload, UpdateProviderPayload } from '../types/api';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { Modal } from '../components/common/Modal';
 import { useToast } from '../components/common/Toast';
+import { ModelDropdown } from '../components/providers/ModelDropdown';
+import { AddModelModal } from '../components/providers/AddModelModal';
 
 const PRESETS = [
   {
@@ -39,7 +41,35 @@ export const ProvidersPage: React.FC = () => {
   // Modals
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  const [isAddModelOpen, setIsAddModelOpen] = useState(false);
   const [selectedProvider, setSelectedProvider] = useState<ProviderWithStatus | null>(null);
+  const [addModelProvider, setAddModelProvider] = useState<ProviderWithStatus | null>(null);
+
+  const getFormDataModelsArray = () => {
+    return formData.models
+      .split(',')
+      .map((m) => m.trim())
+      .filter(Boolean);
+  };
+
+  const handleAddModelToForm = (modelId: string) => {
+    const current = getFormDataModelsArray();
+    if (!current.some((m) => m.toLowerCase() === modelId.toLowerCase())) {
+      const updated = [...current, modelId];
+      setFormData((prev) => ({ ...prev, models: updated.join(', ') }));
+    }
+  };
+
+  const handleRemoveModelFromForm = (modelId: string) => {
+    const current = getFormDataModelsArray();
+    const updated = current.filter((m) => m.toLowerCase() !== modelId.toLowerCase());
+    setFormData((prev) => ({ ...prev, models: updated.join(', ') }));
+  };
+
+  const handleOpenAddModel = (p: ProviderWithStatus) => {
+    setAddModelProvider(p);
+    setIsAddModelOpen(true);
+  };
 
   // Form states
   const [formData, setFormData] = useState({
@@ -257,29 +287,60 @@ export const ProvidersPage: React.FC = () => {
                       </span>
                     </td>
                     <td>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 260 }}>
-                        {p.active_models.length > 0 ? (
-                          p.active_models.map((m) => (
-                            <span
-                              key={m}
-                              style={{
-                                fontSize: 11,
-                                padding: '1px 6px',
-                                borderRadius: 'var(--radius-sm)',
-                                backgroundColor: '#f1f5f9',
-                                color: 'var(--text-secondary)',
-                              }}
-                            >
-                              {m}
-                            </span>
-                          ))
-                        ) : (
-                          <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>All models</span>
-                        )}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxWidth: 280 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+                          {p.active_models.length > 0 ? (
+                            p.active_models.map((m) => (
+                              <span
+                                key={m}
+                                style={{
+                                  fontSize: 11,
+                                  padding: '1px 6px',
+                                  borderRadius: 'var(--radius-sm)',
+                                  backgroundColor: '#f1f5f9',
+                                  color: 'var(--text-secondary)',
+                                }}
+                              >
+                                {m}
+                              </span>
+                            ))
+                          ) : (
+                            <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>All models</span>
+                          )}
+                          <button
+                            type="button"
+                            className="btn btn-secondary btn-sm"
+                            style={{
+                              padding: '1px 6px',
+                              fontSize: 10,
+                              height: 20,
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 3,
+                              borderStyle: 'dashed',
+                              borderRadius: 'var(--radius-sm)',
+                              color: 'var(--primary)',
+                            }}
+                            onClick={() => handleOpenAddModel(p)}
+                            title="Add model from internet"
+                          >
+                            <Plus size={10} />
+                            <span>Add</span>
+                          </button>
+                        </div>
                       </div>
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <div style={{ display: 'inline-flex', gap: 6 }}>
+                        <button
+                          className="btn btn-secondary btn-sm"
+                          onClick={() => handleOpenAddModel(p)}
+                          title="Search internet & add models"
+                          style={{ color: 'var(--primary)' }}
+                        >
+                          <Sparkles size={13} />
+                          <span>Add Model</span>
+                        </button>
                         <button
                           className="btn btn-secondary btn-sm"
                           onClick={() => handleTestConnection(p.id)}
@@ -406,12 +467,47 @@ export const ProvidersPage: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Associated Models (Comma-separated)</label>
-            <input
-              className="form-input"
-              value={formData.models}
-              onChange={(e) => setFormData({ ...formData, models: e.target.value })}
-              placeholder="gemini-1.5-flash, gemini-1.5-pro"
+            <label className="form-label">Associated Models</label>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 6,
+                padding: '8px 10px',
+                backgroundColor: 'var(--bg-muted)',
+                borderRadius: 'var(--radius-md)',
+                marginBottom: 8,
+                minHeight: 38,
+                alignItems: 'center',
+              }}
+            >
+              {getFormDataModelsArray().length > 0 ? (
+                getFormDataModelsArray().map((m) => (
+                  <span key={m} className="model-chip">
+                    <span>{m}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveModelFromForm(m)}
+                      title={`Remove ${m}`}
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))
+              ) : (
+                <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                  No models selected. Choose preset or search internet below.
+                </span>
+              )}
+            </div>
+
+            <ModelDropdown
+              providerName={formData.name || 'Gemini'}
+              baseUrl={formData.base_url}
+              apiKey={formData.api_key}
+              activeModels={getFormDataModelsArray()}
+              onSelectModel={handleAddModelToForm}
+              placeholder="Search internet for latest models..."
             />
           </div>
         </form>
@@ -499,15 +595,60 @@ export const ProvidersPage: React.FC = () => {
           </div>
 
           <div className="form-group">
-            <label className="form-label">Associated Models (Comma-separated)</label>
-            <input
-              className="form-input"
-              value={formData.models}
-              onChange={(e) => setFormData({ ...formData, models: e.target.value })}
+            <label className="form-label">Associated Models</label>
+            <div
+              style={{
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 6,
+                padding: '8px 10px',
+                backgroundColor: 'var(--bg-muted)',
+                borderRadius: 'var(--radius-md)',
+                marginBottom: 8,
+                minHeight: 38,
+                alignItems: 'center',
+              }}
+            >
+              {getFormDataModelsArray().length > 0 ? (
+                getFormDataModelsArray().map((m) => (
+                  <span key={m} className="model-chip">
+                    <span>{m}</span>
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveModelFromForm(m)}
+                      title={`Remove ${m}`}
+                    >
+                      <X size={11} />
+                    </button>
+                  </span>
+                ))
+              ) : (
+                <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>
+                  No models selected. Search and select from dropdown below.
+                </span>
+              )}
+            </div>
+
+            <ModelDropdown
+              providerId={selectedProvider?.id}
+              providerName={formData.name}
+              baseUrl={formData.base_url}
+              apiKey={formData.api_key}
+              activeModels={getFormDataModelsArray()}
+              onSelectModel={handleAddModelToForm}
+              placeholder="Search internet for latest models to add to this provider..."
             />
           </div>
         </form>
       </Modal>
+
+      {/* Quick Add Model Modal */}
+      <AddModelModal
+        isOpen={isAddModelOpen}
+        onClose={() => setIsAddModelOpen(false)}
+        provider={addModelProvider}
+        onModelsUpdated={loadProviders}
+      />
     </div>
   );
 };

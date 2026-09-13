@@ -14,6 +14,8 @@ import {
   ChatRequest,
   ChatResponse,
   ChatCompletionChunk,
+  DiscoverModelsResult,
+  ProviderModelsResponse,
 } from '../types/api';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8088';
@@ -83,6 +85,27 @@ export const api = {
   testProviderConnection: (id: string) =>
     request<TestConnectionResult>(`/api/providers/${id}/test`, {
       method: 'POST',
+    }),
+
+  getAvailableModels: (providerId: string) =>
+    request<DiscoverModelsResult>(`/api/providers/${providerId}/available-models`),
+
+  discoverModels: (name: string, baseUrl?: string, apiKey?: string) => {
+    const params = new URLSearchParams({ name });
+    if (baseUrl) params.set('base_url', baseUrl);
+    if (apiKey) params.set('api_key', apiKey);
+    return request<DiscoverModelsResult>(`/api/providers/discover-models?${params.toString()}`);
+  },
+
+  addProviderModel: (providerId: string, model: string) =>
+    request<ProviderModelsResponse>(`/api/providers/${providerId}/models`, {
+      method: 'POST',
+      body: JSON.stringify({ model }),
+    }),
+
+  removeProviderModel: (providerId: string, model: string) =>
+    request<ProviderModelsResponse>(`/api/providers/${providerId}/models/${encodeURIComponent(model)}`, {
+      method: 'DELETE',
     }),
 
   getModels: () => request<ModelConfig[]>('/api/models'),

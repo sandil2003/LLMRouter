@@ -54,9 +54,16 @@ func SetupRoutes(deps *ServerDeps) http.Handler {
 		api.Route("/providers", func(p chi.Router) {
 			p.Get("/", providersH.List)
 			p.Post("/", providersH.Create)
-			p.Put("/{id}", providersH.Update)
-			p.Delete("/{id}", providersH.Delete)
-			p.Post("/{id}/test", providersH.TestConnection)
+			p.Get("/discover-models", providersH.DiscoverModels)
+
+			p.Route("/{id}", func(sub chi.Router) {
+				sub.Put("/", providersH.Update)
+				sub.Delete("/", providersH.Delete)
+				sub.Post("/test", providersH.TestConnection)
+				sub.Get("/available-models", providersH.GetAvailableModels)
+				sub.Post("/models", providersH.AddModel)
+				sub.Delete("/models/{model}", providersH.RemoveModel)
+			})
 		})
 
 		api.Get("/models", modelsH.List)

@@ -309,3 +309,166 @@ func (h *ProvidersHandler) registerProviderInstance(ctx context.Context, cfg mod
 
 	h.registry.Register(inst)
 }
+
+func (h *ProvidersHandler) GetAvailableModels(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "provider id required", http.StatusBadRequest)
+		return
+	}
+
+	p, err := h.providerRepo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			http.Error(w, "provider not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	apiKey, _ := h.registry.Credentials().GetAPIKey(ctx, id)
+	modelsList, _ := h.modelRepo.ListByProvider(ctx, id)
+	activeModelNames := make([]string, 0, len(modelsList))
+	for _, m := range modelsList {
+		if m.Enabled {
+			activeModelNames = append(activeModelNames, m.Name)
+		}
+	}
+
+	result := providers.DiscoverModels(ctx, p.ID, p.Name, p.BaseURL, apiKey, activeModelNames)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+type AddModelRequest struct {
+	Model  string   `json:"model,omitempty"`
+	Models []string `json:"models,omitempty"`
+}
+
+func (h *ProvidersHandler) AddModel(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		http.Error(w, "provider id required", http.StatusBadRequest)
+		return
+	}
+
+	p, err := h.providerRepo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			http.Error(w, "provider not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var req AddModelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	var toAdd []string
+	if strings.TrimSpace(req.Model) != "" {
+		toAdd = append(toAdd, strings.TrimSpace(req.Model))
+	}
+	for _, m := range req.Models {
+		trimmed := strings.TrimSpace(m)
+		if trimmed != "" {
+			toAdd = append(toAdd, trimmed)
+		}
+	}
+
+	if len(toAdd) == 0 {
+		http.Error(w, "model name is required", http.StatusBadRequest)
+		return
+	}
+
+	for _, m := range toAdd {
+		if err := h.modelRepo.AddModel(ctx, id, m); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	apiKey, _ := h.registry.Credentials().GetAPIKey(ctx, id)
+	h.registerProviderInstance(ctx, *p, apiKey)
+
+	modelsList, _ := h.modelRepo.ListByProvider(ctx, id)
+	activeModelNames := make([]string, 0, len(modelsList))
+	for _, m := range modelsList {
+		if m.Enabled {
+			activeModelNames = append(activeModelNames, m.Name)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"provider_id":   id,
+		"active_models": activeModelNames,
+	})
+}
+
+func (h *ProvidersHandler) RemoveModel(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	id := chi.URLParam(r, "id")
+	modelName := chi.URLParam(r, "model")
+	if id == "" || modelName == "" {
+		http.Error(w, "provider id and model name required", http.StatusBadRequest)
+		return
+	}
+
+	p, err := h.providerRepo.GetByID(ctx, id)
+	if err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			http.Error(w, "provider not found", http.StatusNotFound)
+			return
+		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := h.modelRepo.RemoveModel(ctx, id, modelName); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	apiKey, _ := h.registry.Credentials().GetAPIKey(ctx, id)
+	h.registerProviderInstance(ctx, *p, apiKey)
+
+	modelsList, _ := h.modelRepo.ListByProvider(ctx, id)
+	activeModelNames := make([]string, 0, len(modelsList))
+	for _, m := range modelsList {
+		if m.Enabled {
+			activeModelNames = append(activeModelNames, m.Name)
+		}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"provider_id":   id,
+		"active_models": activeModelNames,
+	})
+}
+
+func (h *ProvidersHandler) DiscoverModels(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	name := r.URL.Query().Get("name")
+	if name == "" {
+		name = r.URL.Query().Get("provider")
+	}
+	if name == "" {
+		http.Error(w, "provider name query parameter required", http.StatusBadRequest)
+		return
+	}
+
+	baseURL := r.URL.Query().Get("base_url")
+	apiKey := r.URL.Query().Get("api_key")
+
+	result := providers.DiscoverModels(ctx, "", name, baseURL, apiKey, nil)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(result)
+}

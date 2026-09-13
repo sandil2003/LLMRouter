@@ -59,6 +59,26 @@ export interface TestConnectionResult {
   message: string;
 }
 
+export interface DiscoveredModel {
+  id: string;
+  name: string;
+  description?: string;
+  context_length?: number;
+  is_active?: boolean;
+}
+
+export interface DiscoverModelsResult {
+  provider_id: string;
+  provider_name: string;
+  source: 'live_api' | 'internet_catalog' | 'curated_catalog';
+  models: DiscoveredModel[];
+}
+
+export interface ProviderModelsResponse {
+  provider_id: string;
+  active_models: string[];
+}
+
 export interface RoutingRule {
   id: string;
   strategy: 'priority' | 'round_robin';

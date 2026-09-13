@@ -115,3 +115,35 @@ func (r *ModelRepository) ReplaceProviderModels(ctx context.Context, providerID 
 
 	return tx.Commit()
 }
+
+func (r *ModelRepository) AddModel(ctx context.Context, providerID, modelName string) error {
+	name := strings.TrimSpace(modelName)
+	if name == "" {
+		return fmt.Errorf("model name cannot be empty")
+	}
+	id := providerID + ":" + name
+	now := time.Now().UTC()
+	_, err := r.db.ExecContext(ctx, `
+		INSERT INTO models (id, provider_id, name, enabled, created_at)
+		VALUES (?, ?, ?, 1, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			enabled = 1
+	`, id, providerID, name, now)
+	if err != nil {
+		return fmt.Errorf("add model %s: %w", name, err)
+	}
+	return nil
+}
+
+func (r *ModelRepository) RemoveModel(ctx context.Context, providerID, modelName string) error {
+	name := strings.TrimSpace(modelName)
+	if name == "" {
+		return fmt.Errorf("model name cannot be empty")
+	}
+	id := providerID + ":" + name
+	_, err := r.db.ExecContext(ctx, `DELETE FROM models WHERE id = ? OR (provider_id = ? AND name = ?)`, id, providerID, name)
+	if err != nil {
+		return fmt.Errorf("remove model %s: %w", name, err)
+	}
+	return nil
+}
