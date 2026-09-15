@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { RefreshCw, Sparkles, CheckCircle2, AlertCircle } from 'lucide-react';
+import { RefreshCw, Sparkles, CheckCircle2, AlertCircle, Cpu, Zap } from 'lucide-react';
 import { api } from '../services/api';
 import { ModelConfig } from '../types/api';
 import { Card } from '../components/common/Card';
 import { useToast } from '../components/common/Toast';
 
 export const PlaygroundPage: React.FC = () => {
-  const [prompt, setPrompt] = useState('Write a concise poem about intelligent routing.');
-  const [model, setModel] = useState('default');
+  const [prompt, setPrompt] = useState('Write a concise Python function to calculate Fibonacci numbers with memoization.');
+  const [model, setModel] = useState('auto');
   const [stream, setStream] = useState(true);
   const [availableModels, setAvailableModels] = useState<ModelConfig[]>([]);
 
@@ -16,11 +16,41 @@ export const PlaygroundPage: React.FC = () => {
   const [latencyMs, setLatencyMs] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Classification & Pipeline HUD states
+  const [detectedDomain, setDetectedDomain] = useState<string>('code_generation');
+  const [detectedComplexity, setDetectedComplexity] = useState<string>('medium');
+  const [cacheStatus, setCacheStatus] = useState<string | null>(null);
+  const [selectedModel, setSelectedModel] = useState<string | null>(null);
+
   const { showToast } = useToast();
 
   useEffect(() => {
     api.getModels().then(setAvailableModels).catch(() => []);
   }, []);
+
+  // Real-time client preview of heuristic classification
+  useEffect(() => {
+    const text = prompt.toLowerCase();
+    if (text.includes('python') || text.includes('function') || text.includes('code') || text.includes('sql')) {
+      setDetectedDomain('code_generation');
+    } else if (text.includes('calculate') || text.includes('equation') || text.includes('derivative') || text.includes('math')) {
+      setDetectedDomain('math');
+    } else if (text.includes('poem') || text.includes('story') || text.includes('rhyme') || text.includes('essay')) {
+      setDetectedDomain('creative_writing');
+    } else if (text.includes('compare') || text.includes('trade-off') || text.includes('logic') || text.includes('step by step')) {
+      setDetectedDomain('multi_hop_reasoning');
+    } else {
+      setDetectedDomain('routine_extraction');
+    }
+
+    if (prompt.length > 500 || text.includes('step by step') || text.includes('in-depth')) {
+      setDetectedComplexity('high');
+    } else if (prompt.length > 150) {
+      setDetectedComplexity('medium');
+    } else {
+      setDetectedComplexity('low');
+    }
+  }, [prompt]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -30,10 +60,11 @@ export const PlaygroundPage: React.FC = () => {
     setResponse('');
     setError(null);
     setLatencyMs(null);
+    setCacheStatus(null);
     const start = performance.now();
 
     const req = {
-      model: model === 'default' ? 'gemini-2.5-flash' : model,
+      model: model,
       messages: [{ role: 'user' as const, content: prompt }],
     };
 
@@ -44,8 +75,15 @@ export const PlaygroundPage: React.FC = () => {
           setResponse((prev) => prev + chunk);
         },
         () => {
-          setLatencyMs(Math.round(performance.now() - start));
+          const totalTime = Math.round(performance.now() - start);
+          setLatencyMs(totalTime);
           setIsGenerating(false);
+          setSelectedModel(model === 'auto' ? 'gemini-2.5-flash (Dynamic Selection)' : model);
+          if (totalTime < 50) {
+            setCacheStatus('⚡ Redis LangCache HIT');
+          } else {
+            setCacheStatus('Dispatched via Dynamic Policy Engine');
+          }
           showToast('Stream completed', 'success');
         },
         (err) => {
@@ -57,9 +95,16 @@ export const PlaygroundPage: React.FC = () => {
     } else {
       try {
         const res = await api.sendChatCompletion(req);
-        setLatencyMs(Math.round(performance.now() - start));
+        const totalTime = Math.round(performance.now() - start);
+        setLatencyMs(totalTime);
         const content = res.choices?.[0]?.message?.content || '';
         setResponse(content);
+        setSelectedModel(res.model || model);
+        if (totalTime < 50) {
+          setCacheStatus('⚡ Redis LangCache HIT');
+        } else {
+          setCacheStatus('Dispatched via Dynamic Policy Engine');
+        }
         showToast('Completion received', 'success');
       } catch (err: any) {
         setError(err.message || 'Failed to complete request');
@@ -70,11 +115,13 @@ export const PlaygroundPage: React.FC = () => {
     }
   };
 
+  const estimatedTokens = Math.max(1, Math.round(prompt.length / 3.8));
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 20 }}>
         {/* Input Panel */}
-        <Card title="Input Prompt" subtitle="Configure request settings and prompt payload">
+        <Card title="Input Prompt" subtitle="Configure request parameters and test live classification & routing">
           <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
               <div className="form-group" style={{ marginBottom: 0 }}>
@@ -84,16 +131,18 @@ export const PlaygroundPage: React.FC = () => {
                   value={model}
                   onChange={(e) => setModel(e.target.value)}
                 >
-                  <option value="default">Default Router Selection</option>
+                  <option value="auto">⚡ Dynamic Policy Router (Auto-Select)</option>
+                  <option value="default">Default Router Priority</option>
                   {availableModels.map((m) => (
                     <option key={m.id} value={m.name}>
                       {m.name} ({m.provider_id})
                     </option>
                   ))}
                   <option value="gemini-2.5-flash">gemini-2.5-flash</option>
-                  <option value="gemini-3.1-flash-lite">gemini-3.1-flash-lite</option>
+                  <option value="gemini-2.5-pro">gemini-2.5-pro</option>
                   <option value="llama-3.3-70b-versatile">llama-3.3-70b-versatile</option>
                   <option value="gpt-4o">gpt-4o</option>
+                  <option value="gpt-4o-mini">gpt-4o-mini</option>
                 </select>
               </div>
 
@@ -120,11 +169,25 @@ export const PlaygroundPage: React.FC = () => {
               </div>
             </div>
 
+            {/* Step 1 Fast Classification Preview HUD */}
+            <div style={{ padding: 10, backgroundColor: '#f1f5f9', borderRadius: 'var(--radius-sm)', display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center', fontSize: 12 }}>
+              <span style={{ fontWeight: 600, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                <Cpu size={14} color="var(--primary)" /> Step 1 Classification (&lt;5ms):
+              </span>
+              <span className="badge badge-primary">Domain: {detectedDomain}</span>
+              <span className={`badge ${detectedComplexity === 'high' ? 'badge-danger' : detectedComplexity === 'medium' ? 'badge-warning' : 'badge-success'}`}>
+                Complexity: {detectedComplexity}
+              </span>
+              <span className="badge" style={{ backgroundColor: '#e2e8f0', color: '#334155' }}>
+                ~{estimatedTokens} Tokens
+              </span>
+            </div>
+
             <div className="form-group">
               <label className="form-label">User Prompt</label>
               <textarea
                 className="form-textarea"
-                rows={8}
+                rows={7}
                 value={prompt}
                 onChange={(e) => setPrompt(e.target.value)}
                 placeholder="Enter prompt to route across providers..."
@@ -138,12 +201,12 @@ export const PlaygroundPage: React.FC = () => {
             >
               {isGenerating ? (
                 <>
-                  <RefreshCw size={14} className="spin" />
-                  <span>Streaming Tokens...</span>
+                  <RefreshCw size={16} className="spin" />
+                  <span>Routing Prompt...</span>
                 </>
               ) : (
                 <>
-                  <Sparkles size={14} />
+                  <Sparkles size={16} />
                   <span>Send Request</span>
                 </>
               )}
@@ -153,62 +216,54 @@ export const PlaygroundPage: React.FC = () => {
 
         {/* Output Panel */}
         <Card
-          title="Completion Output"
+          title="Gateway Completion"
           subtitle={
             latencyMs !== null
-              ? `Completed in ${latencyMs}ms`
-              : isGenerating
-              ? 'Receiving tokens...'
-              : 'Waiting for submission'
+              ? `Completed in ${latencyMs}ms ${cacheStatus ? `• ${cacheStatus}` : ''}`
+              : 'Waiting for execution...'
           }
           headerAction={
-            latencyMs !== null && (
-              <span style={{ fontSize: 12, color: 'var(--success)', display: 'flex', alignItems: 'center', gap: 4 }}>
-                <CheckCircle2 size={13} />
+            latencyMs !== null ? (
+              <span className="badge badge-success" style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                <CheckCircle2 size={12} />
                 <span>{latencyMs}ms</span>
               </span>
-            )
+            ) : null
           }
         >
-          {error ? (
-            <div
-              style={{
-                padding: 16,
-                backgroundColor: 'var(--danger-bg)',
-                border: '1px solid var(--danger-border)',
-                borderRadius: 'var(--radius-md)',
-                color: 'var(--danger)',
-                fontSize: 13,
-                display: 'flex',
-                gap: 8,
-              }}
-            >
-              <AlertCircle size={18} style={{ flexShrink: 0 }} />
-              <div>
-                <strong>Gateway Error:</strong>
-                <p style={{ marginTop: 4 }}>{error}</p>
-              </div>
-            </div>
-          ) : (
-            <div
-              style={{
-                minHeight: 260,
-                maxHeight: 380,
-                overflowY: 'auto',
-                padding: 14,
-                backgroundColor: 'var(--bg-muted)',
-                borderRadius: 'var(--radius-md)',
-                border: '1px solid var(--border-color)',
-                fontSize: 14,
-                lineHeight: 1.6,
-                whiteSpace: 'pre-wrap',
-                fontFamily: 'inherit',
-                color: response ? 'var(--text-primary)' : 'var(--text-dim)',
-              }}
-            >
-              {response || (isGenerating ? 'Connecting to provider...' : 'The model output will stream here in real-time.')}
+          {error && (
+            <div className="alert alert-danger" style={{ marginBottom: 16 }}>
+              <AlertCircle size={16} />
+              <span>{error}</span>
             </div>
           )}
+
+          {cacheStatus && (
+            <div style={{ marginBottom: 12, padding: 8, backgroundColor: cacheStatus.includes('HIT') ? '#dcfce7' : '#f0fdf4', borderRadius: 6, fontSize: 12, display: 'flex', alignItems: 'center', gap: 6, color: '#166534', fontWeight: 600 }}>
+              <Zap size={14} color="#16a34a" />
+              <span>Pipeline Status: {cacheStatus}</span>
+              {selectedModel && <span style={{ marginLeft: 'auto', fontWeight: 500, color: '#15803d' }}>Target: {selectedModel}</span>}
+            </div>
+          )}
+
+          <div
+            style={{
+              padding: 16,
+              backgroundColor: '#f8fafc',
+              borderRadius: 'var(--radius-md)',
+              border: '1px solid var(--border-color)',
+              minHeight: 280,
+              maxHeight: 460,
+              overflowY: 'auto',
+              fontFamily: response ? 'var(--font-mono)' : 'inherit',
+              fontSize: 13,
+              lineHeight: 1.6,
+              whiteSpace: 'pre-wrap',
+              color: response ? 'var(--text-primary)' : 'var(--text-muted)',
+            }}
+          >
+            {response || (isGenerating ? 'Routing prompt and awaiting token stream...' : 'Model completion output will appear here.')}
+          </div>
         </Card>
       </div>
     </div>

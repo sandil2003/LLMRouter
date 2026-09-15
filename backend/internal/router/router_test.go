@@ -42,6 +42,10 @@ func TestRouterFallbackOnRateLimit(t *testing.T) {
 		registry,
 		rateLimiter,
 		cb,
+		nil,
+		nil,
+		nil,
+		nil,
 	)
 
 	// Create 2 mock providers: MockA (priority 1), MockB (priority 2)
@@ -105,5 +109,92 @@ func TestRouterFallbackOnRateLimit(t *testing.T) {
 	}
 	if mockB.CallCount != 2 {
 		t.Errorf("expected mockB to be called 2 times, called %d", mockB.CallCount)
+	}
+}
+
+func TestRouterSemanticCacheHit(t *testing.T) {
+	ctx := context.Background()
+	db, err := database.Open(":memory:")
+	if err != nil {
+		t.Fatalf("failed to open in-memory db: %v", err)
+	}
+	defer db.Close()
+
+	providerRepo := repository.NewProviderRepository(db)
+	modelRepo := repository.NewModelRepository(db)
+	routingRepo := repository.NewRoutingRepository(db)
+	usageRepo := repository.NewUsageRepository(db)
+	logRepo := repository.NewLogRepository(db)
+
+	registry := providers.NewRegistry(nil)
+	rateLimiter := ratelimit.NewTracker(10 * time.Second)
+	cb := circuitbreaker.NewManager(3, 10*time.Second)
+
+	engine := router.NewEngine(
+		providerRepo,
+		modelRepo,
+		routingRepo,
+		usageRepo,
+		logRepo,
+		registry,
+		rateLimiter,
+		cb,
+		nil,
+		nil,
+		nil,
+		nil,
+	)
+
+	mockP := mock.New("mock-cache", "Mock Cache", "*")
+	mockP.ResponseContent = "Cached answer from upstream provider"
+	registry.Register(mockP)
+
+	_ = providerRepo.Create(ctx, &models.ProviderConfig{
+		ID:       "mock-cache",
+		Name:     "Mock Cache",
+		Enabled:  true,
+		Priority: 1,
+	})
+
+	req := &models.ChatRequest{
+		Model: "gpt-4o",
+		Messages: []models.ChatMessage{
+			{Role: "user", Content: "Explain the concept of rate limiting in web architecture"},
+		},
+	}
+
+	// 1. First execution: cache miss, calls upstream provider
+	resp1, err := engine.ExecuteChat(ctx, req, "req-cache-1")
+	if err != nil {
+		t.Fatalf("expected request 1 to succeed: %v", err)
+	}
+	if resp1.Choices[0].Message.Content != "Cached answer from upstream provider" {
+		t.Errorf("unexpected content: %s", resp1.Choices[0].Message.Content)
+	}
+	if mockP.CallCount != 1 {
+		t.Errorf("expected provider call count 1, got %d", mockP.CallCount)
+	}
+
+	// Small pause to allow async cache write
+	time.Sleep(30 * time.Millisecond)
+
+	// 2. Second execution: semantically identical prompt should hit cache without calling provider!
+	req2 := &models.ChatRequest{
+		Model: "gpt-4o",
+		Messages: []models.ChatMessage{
+			{Role: "user", Content: "Explain the concept of rate limiting in web architecture"},
+		},
+	}
+	resp2, err := engine.ExecuteChat(ctx, req2, "req-cache-2")
+	if err != nil {
+		t.Fatalf("expected request 2 to hit cache: %v", err)
+	}
+	if resp2.Choices[0].Message.Content != "Cached answer from upstream provider" {
+		t.Errorf("unexpected content from cache: %s", resp2.Choices[0].Message.Content)
+	}
+
+	// Call count must STILL be 1 because request 2 was satisfied directly by LangCache!
+	if mockP.CallCount != 1 {
+		t.Errorf("expected provider call count to remain 1 after cache hit, got %d", mockP.CallCount)
 	}
 }

@@ -11,6 +11,8 @@ The application is designed to run on:
 
 The architecture should remain extensible for future platforms such as Linux and potentially mobile clients.
 
+> 📖 **Architecture Deep-Dive**: For detailed pipeline flows, diagrams, and algorithmic specifications, check out the [Intelligent Routing Pipeline Architecture](docs/architecture.md).
+
 ---
 
 # 1. Core Objective

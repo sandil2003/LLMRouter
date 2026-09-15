@@ -12,10 +12,13 @@ import (
 	"time"
 
 	"github.com/llmrouter/backend/internal/api"
+	"github.com/llmrouter/backend/internal/background"
 	"github.com/llmrouter/backend/internal/circuitbreaker"
+	"github.com/llmrouter/backend/internal/classifier"
 	"github.com/llmrouter/backend/internal/config"
 	"github.com/llmrouter/backend/internal/database"
 	"github.com/llmrouter/backend/internal/database/repository"
+	"github.com/llmrouter/backend/internal/langcache"
 	"github.com/llmrouter/backend/internal/logging"
 	"github.com/llmrouter/backend/internal/models"
 	"github.com/llmrouter/backend/internal/providers"
@@ -24,6 +27,7 @@ import (
 	"github.com/llmrouter/backend/internal/providers/openai"
 	"github.com/llmrouter/backend/internal/providers/openrouter"
 	"github.com/llmrouter/backend/internal/ratelimit"
+	"github.com/llmrouter/backend/internal/registry"
 	"github.com/llmrouter/backend/internal/router"
 )
 
@@ -56,29 +60,48 @@ func main() {
 	logRepo := repository.NewLogRepository(db)
 
 	// 3. Provider Registry & Credential Store
-	registry := providers.NewRegistry(nil)
+	provRegistry := providers.NewRegistry(nil)
 
 	// 4. Resilience Layer
 	rateLimiter := ratelimit.NewTracker(60 * time.Second)
-	circuitBreaker := circuitbreaker.NewManager(3, 30*time.Second)
+	circuitBreaker := circuitbreaker.NewManager(3, 60*time.Second)
 
-	// 5. Routing Engine
+	// 5. Intelligent Routing Pipeline Components
+	fastClassifier := classifier.NewClassifier()
+	cacheClient := langcache.NewLangCache(langcache.Config{
+		Endpoint: os.Getenv("LANGCACHE_ENDPOINT"),
+		CacheID:  os.Getenv("LANGCACHE_CACHE_ID"),
+		APIKey:   os.Getenv("LANGCACHE_API_KEY"),
+		RedisURL: os.Getenv("REDIS_URL"),
+	})
+	modelRegistry := registry.NewModelRegistry()
+	policyEngine := registry.NewPolicyEngine(modelRegistry, registry.DefaultPolicyWeights())
+
+	// 6. Routing Engine
 	engine := router.NewEngine(
 		providerRepo,
 		modelRepo,
 		routingRepo,
 		usageRepo,
 		logRepo,
-		registry,
+		provRegistry,
 		rateLimiter,
 		circuitBreaker,
+		fastClassifier,
+		cacheClient,
+		policyEngine,
+		modelRegistry,
 	)
 
-	// 6. Bootstrap default providers if database is fresh
-	ctx := context.Background()
-	bootstrapDefaultProviders(ctx, providerRepo, modelRepo, registry)
+	// 7. Decoupled Offline Background Sync Worker
+	syncWorker := background.NewSyncWorker(modelRegistry, provRegistry, 12*time.Hour)
+	syncWorker.Start()
 
-	// 7. HTTP Routes & Server
+	// 8. Bootstrap default providers if database is fresh
+	ctx := context.Background()
+	bootstrapDefaultProviders(ctx, providerRepo, modelRepo, provRegistry)
+
+	// 9. HTTP Routes & Server
 	deps := &api.ServerDeps{
 		DB:           db,
 		ProviderRepo: providerRepo,
@@ -86,8 +109,9 @@ func main() {
 		RoutingRepo:  routingRepo,
 		UsageRepo:    usageRepo,
 		LogRepo:      logRepo,
-		Registry:     registry,
+		Registry:     provRegistry,
 		Engine:       engine,
+		SyncWorker:   syncWorker,
 	}
 
 	handler := api.SetupRoutes(deps)

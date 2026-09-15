@@ -61,6 +61,10 @@ func setupTestRig(t *testing.T) *testRig {
 		registry,
 		rateLimiter,
 		cb,
+		nil,
+		nil,
+		nil,
+		nil,
 	)
 
 	// Register 2 mocks: MockA (priority 1, rate limited) and MockB (priority 2, healthy)

@@ -79,17 +79,73 @@ export interface ProviderModelsResponse {
   active_models: string[];
 }
 
+export type RoutingStrategyType = 'priority' | 'round_robin' | 'dynamic_policy';
+
+export interface PolicyWeights {
+  capability: number;
+  cost: number;
+  latency: number;
+  preset: string;
+}
+
+export interface CacheStats {
+  active_mode: string;
+  total_searches: number;
+  hits: number;
+  misses: number;
+  hit_ratio: number;
+  cached_entries: number;
+  connected: boolean;
+}
+
+export interface SyncStatus {
+  is_running: boolean;
+  last_sync_at: string;
+  last_duration_ms: number;
+  total_syncs: number;
+  models_updated: number;
+  last_message: string;
+}
+
+export interface RegisteredModelMetadata {
+  id: string;
+  provider_id: string;
+  name: string;
+  context_window: number;
+  supported_modalities: string[];
+  cost_per_1m_input: number;
+  cost_per_1m_output: number;
+  domain_scores: Record<string, number>;
+  supports_tools: boolean;
+  rolling_ttft_ms: number;
+  p95_latency_ms: number;
+  error_rate: number;
+}
+
+export interface RequestClassification {
+  domain: string;
+  complexity: string;
+  input_tokens: number;
+  json_required: boolean;
+  tools_required: boolean;
+  multimodal: boolean;
+  classification_ms: number;
+}
+
 export interface RoutingRule {
   id: string;
-  strategy: 'priority' | 'round_robin';
+  strategy: RoutingStrategyType;
   enabled: boolean;
   created_at: string;
   updated_at: string;
 }
 
 export interface RoutingConfigResponse {
-  strategy: 'priority' | 'round_robin';
+  strategy: RoutingStrategyType;
   providers: ProviderConfig[];
+  policy_weights?: PolicyWeights;
+  cache_stats?: CacheStats;
+  sync_status?: SyncStatus;
 }
 
 export interface ProviderPriorityUpdate {
@@ -98,7 +154,7 @@ export interface ProviderPriorityUpdate {
 }
 
 export interface RoutingUpdateRequest {
-  strategy?: 'priority' | 'round_robin';
+  strategy?: RoutingStrategyType;
   priorities?: ProviderPriorityUpdate[];
 }
 

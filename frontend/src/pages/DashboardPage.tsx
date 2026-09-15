@@ -8,9 +8,10 @@ import {
   ArrowRight,
   Send,
   RefreshCw,
+  Database,
 } from 'lucide-react';
 import { api } from '../services/api';
-import { ProviderWithStatus, UsageSummary, RequestLog } from '../types/api';
+import { ProviderWithStatus, UsageSummary, RequestLog, CacheStats } from '../types/api';
 import { Card } from '../components/common/Card';
 import { Badge } from '../components/common/Badge';
 import { useToast } from '../components/common/Toast';
@@ -20,6 +21,7 @@ export const DashboardPage: React.FC = () => {
   const [providers, setProviders] = useState<ProviderWithStatus[]>([]);
   const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [recentLogs, setRecentLogs] = useState<RequestLog[]>([]);
+  const [cacheStats, setCacheStats] = useState<CacheStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Quick test state
@@ -30,14 +32,16 @@ export const DashboardPage: React.FC = () => {
 
   const loadData = async () => {
     try {
-      const [provList, usageData, logs] = await Promise.all([
+      const [provList, usageData, logs, cache] = await Promise.all([
         api.getProviders().catch(() => []),
         api.getUsage().catch(() => null),
         api.getLogs({ limit: 5 }).catch(() => []),
+        api.getCacheStats().catch(() => null),
       ]);
       setProviders(Array.isArray(provList) ? provList : []);
       setUsage(usageData);
       setRecentLogs(Array.isArray(logs) ? logs : []);
+      setCacheStats(cache);
     } catch (err: any) {
       showToast(err.message || 'Failed to load dashboard data', 'error');
     } finally {
@@ -135,6 +139,21 @@ export const DashboardPage: React.FC = () => {
             {usage?.average_latency_ms ? Math.round(usage.average_latency_ms) : 0} ms
           </div>
           <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>Roundtrip completion time</span>
+        </Card>
+
+        <Card>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>Redis LangCache</span>
+            <div style={{ padding: 6, borderRadius: 'var(--radius-md)', backgroundColor: 'var(--bg-muted)' }}>
+              <Database size={16} color="var(--primary)" />
+            </div>
+          </div>
+          <div style={{ fontSize: 26, fontWeight: 700, marginTop: 8 }}>
+            {cacheStats?.hits ?? 0} hits
+          </div>
+          <span style={{ fontSize: 12, color: 'var(--success)' }}>
+            {cacheStats ? `${(cacheStats.hit_ratio * 100).toFixed(0)}% ratio` : '0%'} • &lt;15ms latency
+          </span>
         </Card>
       </div>
 

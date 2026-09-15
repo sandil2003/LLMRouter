@@ -16,6 +16,9 @@ import {
   ChatCompletionChunk,
   DiscoverModelsResult,
   ProviderModelsResponse,
+  PolicyWeights,
+  RegisteredModelMetadata,
+  CacheStats,
 } from '../types/api';
 
 const DEFAULT_BASE_URL = 'http://127.0.0.1:8088';
@@ -116,6 +119,21 @@ export const api = {
     request<RoutingConfigResponse>('/api/routing', {
       method: 'PUT',
       body: JSON.stringify(payload),
+    }),
+
+  updatePolicyWeights: (payload: Partial<PolicyWeights>) =>
+    request<PolicyWeights>('/api/routing/policy', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    }),
+
+  getModelRegistry: () => request<RegisteredModelMetadata[]>('/api/routing/registry'),
+
+  getCacheStats: () => request<CacheStats>('/api/routing/cache-stats'),
+
+  triggerSync: () =>
+    request<{ message: string; status: string }>('/api/routing/sync', {
+      method: 'POST',
     }),
 
   getUsage: () => request<UsageSummary>('/api/usage'),

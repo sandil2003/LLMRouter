@@ -13,17 +13,25 @@ const (
 	StateHalfOpen State = "half_open"
 )
 
-type breakerInfo struct {
-	state              State
-	consecutiveFailures int
-	openedAt           time.Time
+type windowEvent struct {
+	timestamp  time.Time
+	isFailure  bool
+	statusCode int
 }
 
-// Manager maintains circuit breakers per provider.
+type breakerInfo struct {
+	state               State
+	consecutiveFailures int
+	window              []windowEvent
+	openedAt            time.Time
+}
+
+// Manager maintains sliding-window circuit breakers per provider.
 type Manager struct {
 	mu               sync.RWMutex
 	breakers         map[string]*breakerInfo
 	failureThreshold int
+	windowDuration   time.Duration
 	openTimeout      time.Duration
 }
 
@@ -32,12 +40,13 @@ func NewManager(failureThreshold int, openTimeout time.Duration) *Manager {
 		failureThreshold = 3
 	}
 	if openTimeout <= 0 {
-		openTimeout = 30 * time.Second
+		openTimeout = 60 * time.Second // 60s cooldown as specified
 	}
 
 	return &Manager{
 		breakers:         make(map[string]*breakerInfo),
 		failureThreshold: failureThreshold,
+		windowDuration:   60 * time.Second,
 		openTimeout:      openTimeout,
 	}
 }
@@ -46,7 +55,8 @@ func (m *Manager) getOrCreate(providerID string) *breakerInfo {
 	b, exists := m.breakers[providerID]
 	if !exists {
 		b = &breakerInfo{
-			state: StateClosed,
+			state:  StateClosed,
+			window: make([]windowEvent, 0, 32),
 		}
 		m.breakers[providerID] = b
 	}
@@ -67,14 +77,14 @@ func (m *Manager) CanExecute(providerID string) bool {
 
 	case StateOpen:
 		if now.Sub(b.openedAt) >= m.openTimeout {
-			// Transition to Half-Open to allow single probe request
+			// Cooldown expired; transition to Half-Open to allow trial probe
 			b.state = StateHalfOpen
 			return true
 		}
 		return false
 
 	case StateHalfOpen:
-		// In half-open, allow trial request
+		// In half-open, allow single trial probe
 		return true
 
 	default:
@@ -90,20 +100,55 @@ func (m *Manager) RecordSuccess(providerID string) {
 	b := m.getOrCreate(providerID)
 	b.consecutiveFailures = 0
 	b.state = StateClosed
+	m.pruneAndAppend(b, windowEvent{timestamp: time.Now(), isFailure: false})
 }
 
-// RecordFailure records a failure; trips circuit to Open if threshold is reached.
+// RecordFailure records a generic failure.
 func (m *Manager) RecordFailure(providerID string) {
+	m.RecordFailureWithCode(providerID, 500)
+}
+
+// RecordFailureWithCode records a failure with HTTP status code (e.g. 429, 503).
+func (m *Manager) RecordFailureWithCode(providerID string, statusCode int) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	b := m.getOrCreate(providerID)
 	b.consecutiveFailures++
+	now := time.Now()
 
-	if b.state == StateHalfOpen || b.consecutiveFailures >= m.failureThreshold {
-		b.state = StateOpen
-		b.openedAt = time.Now()
+	m.pruneAndAppend(b, windowEvent{
+		timestamp:  now,
+		isFailure:  true,
+		statusCode: statusCode,
+	})
+
+	// Count sliding-window rate limit / overload errors in last 60s
+	rateLimitOrOverloadFailures := 0
+	for _, ev := range b.window {
+		if ev.isFailure && (ev.statusCode == 429 || ev.statusCode == 503 || ev.statusCode == 504 || ev.statusCode == 500) {
+			rateLimitOrOverloadFailures++
+		}
 	}
+
+	// Trip circuit breaker if consecutive failures exceed threshold or sliding window threshold hit
+	if b.state == StateHalfOpen ||
+		b.consecutiveFailures >= m.failureThreshold ||
+		rateLimitOrOverloadFailures >= m.failureThreshold {
+		b.state = StateOpen
+		b.openedAt = now
+	}
+}
+
+func (m *Manager) pruneAndAppend(b *breakerInfo, ev windowEvent) {
+	cutoff := ev.timestamp.Add(-m.windowDuration)
+	filtered := b.window[:0]
+	for _, e := range b.window {
+		if e.timestamp.After(cutoff) {
+			filtered = append(filtered, e)
+		}
+	}
+	b.window = append(filtered, ev)
 }
 
 // GetStatus returns the current state and consecutive error count.
@@ -126,4 +171,5 @@ func (m *Manager) Reset(providerID string) {
 	b := m.getOrCreate(providerID)
 	b.consecutiveFailures = 0
 	b.state = StateClosed
+	b.window = b.window[:0]
 }
